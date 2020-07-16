@@ -38,7 +38,7 @@ class MelanomaDataset:
         else:
             transformer = transforms.Compose([
                 # transforms.RandomResizedCrop(size=260, scale=(0.7, 1.0)),
-                HairAugmentation(p=.2),
+                # HairAugmentation(p=.2),
                 transforms.RandomHorizontalFlip(p=.5),
                 transforms.RandomVerticalFlip(p=.5),
                 transforms.ColorJitter(brightness=32. / 255., saturation=0.5),

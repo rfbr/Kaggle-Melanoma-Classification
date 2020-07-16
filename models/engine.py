@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from sklearn.metrics import roc_auc_score
 import numpy as np
 from torch.cuda import amp
+from utils.roc_star import roc_star_loss, epoch_update_gamma
 
 
 def criterion_margin_focal_binary_cross_entropy(logit, truth):
@@ -31,10 +32,12 @@ def criterion_margin_focal_binary_cross_entropy(logit, truth):
     return loss
 
 
-def train(data_loader, model, optimizer, device, scaler):
+def train(epoch, epoch_gamma, last_epoch_y_t, last_epoch_y_pred, data_loader, model, optimizer, device, scaler):
     model.train()
     losses = AverageMeter()
     tqdm_data = tqdm(data_loader, total=len(data_loader))
+    whole_y_pred = np.array([])
+    whole_y_t = np.array([])
     for data in tqdm_data:
         # Fetch data
         images = data['image']
@@ -48,19 +51,32 @@ def train(data_loader, model, optimizer, device, scaler):
         optimizer.zero_grad()
         with amp.autocast():
             logits = model(images, metadata)
+            y_pred = torch.sigmoid(logits).squeeze()
             # loss = nn.BCEWithLogitsLoss()(logits, targets)
-            loss = criterion_margin_focal_binary_cross_entropy(logits, targets)
+            if epoch == 0:
+                loss = criterion_margin_focal_binary_cross_entropy(
+                    logits, targets)
+            else:
+                loss = roc_star_loss(targets, y_pred, epoch_gamma,
+                                     last_epoch_y_t, last_epoch_y_pred)
         scaler.scale(loss).backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(optimizer)
         scaler.update()
         losses.update(loss.item(), images.size(0))
+
+        whole_y_pred = np.append(
+            whole_y_pred, y_pred.clone().detach().cpu().numpy())
+        whole_y_t = np.append(
+            whole_y_t, targets.clone().detach().cpu().numpy())
         tqdm_data.set_postfix(loss=losses.avg)
     torch.cuda.empty_cache()
+    return whole_y_t, whole_y_pred
 
 
 def evaluation(data_loader, model, optimizer, device):
     model.eval()
+
     prediction_list = []
     target_list = []
     with torch.no_grad():
@@ -78,6 +94,7 @@ def evaluation(data_loader, model, optimizer, device):
             prediction_list.append(preds)
             target_list.append(targets.cpu().detach().numpy())
     torch.cuda.empty_cache()
+
     roc_auc = roc_auc_score(np.concatenate(target_list),
                             np.concatenate(prediction_list))
     return roc_auc

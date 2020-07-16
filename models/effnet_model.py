@@ -30,7 +30,7 @@ class EffNet(nn.Module):
                                         nn.ReLU(),
                                         nn.Dropout(p=0.1))
         self.dropout = nn.Dropout(.1)
-        self.ouput = nn.Linear(512 + 256, 1)
+        self.cat_ouput = nn.Linear(512 + 256, 1)
 
     def forward(self, image, metadata):
         # x = self.model.extract_features(image)
@@ -39,5 +39,5 @@ class EffNet(nn.Module):
         metafeatures_embeddings = self.meta_model(metadata)
         features = torch.cat(
             (image_embeddings, metafeatures_embeddings), dim=1)
-        output = self.ouput(features)
+        output = self.cat_ouput(features)
         return output

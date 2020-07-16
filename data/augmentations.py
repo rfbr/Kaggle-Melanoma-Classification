@@ -12,6 +12,7 @@ from PIL import Image
 import io
 import warnings
 from copy import deepcopy
+import imutils
 warnings.filterwarnings("ignore")
 
 
@@ -95,13 +96,91 @@ class HairAugmentation:
             return img
 
 
+class CVHairAugmentation:
+    def __init__(self, p=.5, n_hair_range=(20, 100), degrees=[2, 3, 4, 5, 6]):
+        self.p = p
+        self.degrees = degrees
+        self.n_hair_range = n_hair_range
+
+    def __call__(self, img):
+        if np.random.rand() < self.p:
+            # PIL image to openCV image
+            img = img.convert('RGB')
+            open_cv_image = np.array(img)
+            # Convert RGB to BGR
+            open_cv_image = open_cv_image[:, :, ::-1].copy()
+            n_hair = np.random.randint(*self.n_hair_range)
+            img_shape = img._size
+            print(n_hair)
+            for _ in range(n_hair):
+                # Random rectangle
+                x_rectangle = np.random.randint(
+                    low=0, high=img_shape[0]-1, size=2)
+                y_rectangle = np.random.randint(
+                    low=0, high=img_shape[1]-1, size=2)
+
+                x_min = min(x_rectangle[0], x_rectangle[1])
+                x_max = max(x_min+1, max(x_rectangle[0], x_rectangle[1]))
+                y_min = min(y_rectangle[0], y_rectangle[1])
+                y_max = max(y_min+1, max(y_rectangle[0], y_rectangle[1]))
+
+                X = np.random.randint(low=x_min, high=x_max,
+                                      size=50).reshape((-1, 1))
+                y = np.random.randint(low=y_min, high=y_max, size=50)
+
+                X_plot = np.linspace(x_min, x_max, 100).reshape((-1, 1))
+                degree = np.random.choice(self.degrees)
+                model = make_pipeline(PolynomialFeatures(degree), Ridge())
+                model.fit(X, y)
+                hair = model.predict(X_plot)
+                draw_points = (np.asarray(
+                    [X_plot.squeeze(), hair]).T).astype(np.int32)
+                overlay = open_cv_image.copy()
+                cv2.polylines(overlay, [
+                              draw_points], False, (0, 0, 0), thickness=1)
+                angle = np.random.randint(0, 360)
+                overlay = imutils.rotate(overlay, angle=angle)
+                cv2.imshow('image', overlay)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+                alpha = 0.2  # Transparency factor.
+
+                # Following line overlays transparent rectangle over the image
+                open_cv_image = cv2.addWeighted(
+                    overlay, alpha, open_cv_image, 1 - alpha, 0)
+
+                # # first of all, the base transformation of the data points is needed
+                # base = plt.gca().transData
+                # random_degree = np.random.randint(0, 360)
+                # rot = plt_transforms.Affine2D().rotate_deg_around(
+                #     img_shape[0]//2, img_shape[1]//2, random_degree)
+                # alpha = np.random.rand()*.4
+                # plt.plot(X_plot, hair, 'black',
+                #          alpha=alpha, transform=base+rot)
+            cv2.imshow('image', open_cv_image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            return
+        else:
+            return img
+
+
 if __name__ == '__main__':
+    # black blank image
+    blank_image = np.zeros(shape=[512, 512, 3], dtype=np.uint8)
+    # print(blank_image.shape)
+    cv2.imshow("Black Blank", blank_image)
+    # white blank image
+    blank_image2 = 255 * np.ones(shape=[512, 512, 3], dtype=np.uint8)
+    cv2.imshow("White Blank", blank_image2)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     IMAGE_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/data/train_260/ISIC_0015719.jpg'
     image = Image.open(IMAGE_PATH)
     transformer = transforms.Compose([
         # MicroscopeAugmentation(),
-        HairAugmentation(p=1),
+        CVHairAugmentation(p=1),
     ])
     aug_img = transformer(image)
-    print(aug_img._size)
-    aug_img.show()
+    # print(aug_img._size)
+    # aug_img.show()

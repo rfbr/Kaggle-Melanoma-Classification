@@ -13,6 +13,9 @@ import numpy as np
 from utils.seed import set_seed
 from utils.lr import find_optimal_lr
 import matplotlib.pyplot as plt
+from utils.target_encoder import KFoldTargetEncoder
+from utils.roc_star import epoch_update_gamma
+from utils.freeze import freeze, unfreeze_layer
 
 
 def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
@@ -119,8 +122,18 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
         early_stopping = EarlyStopping(patience=3, mode='max')
         model_path = f'saved_models/model_{fold}.bin'
         best_auc = 0
+
+        # initialize last epoch with random values
+        last_whole_y_t = None
+        last_whole_y_pred = None
+        epoch_gamma = .2
         for epoch in range(EPOCHS):
-            train(df_train, model, optimizer, device, scaler)
+            whole_y_t, whole_y_pred = train(epoch, epoch_gamma, last_whole_y_t, last_whole_y_pred,
+                                            df_train, model, optimizer, device, scaler)
+            last_whole_y_t = torch.tensor(whole_y_t).cuda()
+            last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
+            epoch_gamma = epoch_update_gamma(
+                last_whole_y_t, last_whole_y_pred, epoch)
             valid_roc_auc = evaluation(df_valid, model, optimizer, device)
             print(f'Epoch: {epoch}, validaion ROC AUC: {valid_roc_auc}')
             if valid_roc_auc > best_auc:
@@ -138,9 +151,9 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
 if __name__ == '__main__':
     batches = [64]
     sizes = [260]  # 224, 240, 260, 380, 380, 456, 528, 600
-    lrs = [1e-3]
-    f = open('cv_results.txt', 'x')
-    f.write('B1-effnet\n')
+    lrs = [5e-4]
+    # f = open('cv_results.txt', 'x')
+    # f.write('B1-effnet\n')
     for bs in batches:
         for size in sizes:
             # if (bs == 32 and size > 456) or (bs == 64 and size > 260) or (bs == 128 and size > 224):
@@ -149,8 +162,8 @@ if __name__ == '__main__':
                 print(f"Batch size: {bs}")
                 print(f"Size: {size}")
                 print(f"LR: {lr}")
-                f.write(f'Batch size: {bs}, size: {size}, LR: {lr}\n')
+                # f.write(f'Batch size: {bs}, size: {size}, LR: {lr}\n')
                 mean, std = main(bs=bs, size=size, lr=lr)
-                f.write(
-                    f'Cross validation score: {mean} +/-{std}\n')
-    f.close()
+                # f.write(
+                #     f'Cross validation score: {mean} +/-{std}\n')
+    # f.close()
