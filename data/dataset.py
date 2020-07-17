@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 import os
-from data.augmentations import MicroscopeAugmentation, HairAugmentation
+from data.augmentations import MicroscopeAugmentation, CVHairAugmentation
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
@@ -39,6 +39,7 @@ class MelanomaDataset:
             transformer = transforms.Compose([
                 # transforms.RandomResizedCrop(size=260, scale=(0.7, 1.0)),
                 # HairAugmentation(p=.2),
+                # CVHairAugmentation(p=.5),
                 transforms.RandomHorizontalFlip(p=.5),
                 transforms.RandomVerticalFlip(p=.5),
                 transforms.ColorJitter(brightness=32. / 255., saturation=0.5),

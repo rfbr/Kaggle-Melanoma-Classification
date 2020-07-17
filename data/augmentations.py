@@ -16,6 +16,23 @@ import imutils
 warnings.filterwarnings("ignore")
 
 
+def rotPt(x, y, angle):
+    cx = 260//2
+    cy = 260//2
+
+    x -= cx
+    y -= cy
+
+    tmp = x
+    x = x*np.cos(angle) - y*np.sin(angle)
+    y = tmp*np.sin(angle) + y*np.cos(angle)
+
+    x += cx
+    y += cy
+
+    return x, y
+
+
 class MicroscopeAugmentation:
     def __init__(self, p=.5, size=(224, 224)):
         self.p = p
@@ -97,7 +114,7 @@ class HairAugmentation:
 
 
 class CVHairAugmentation:
-    def __init__(self, p=.5, n_hair_range=(20, 100), degrees=[2, 3, 4, 5, 6]):
+    def __init__(self, p=.5, n_hair_range=(20, 70), degrees=[2, 3, 4, 5, 6]):
         self.p = p
         self.degrees = degrees
         self.n_hair_range = n_hair_range
@@ -105,13 +122,14 @@ class CVHairAugmentation:
     def __call__(self, img):
         if np.random.rand() < self.p:
             # PIL image to openCV image
-            img = img.convert('RGB')
+            img = img.convert('RGBA')
             open_cv_image = np.array(img)
-            # Convert RGB to BGR
-            open_cv_image = open_cv_image[:, :, ::-1].copy()
+            background = cv2.cvtColor(
+                open_cv_image, cv2.COLOR_RGB2BGRA)
+
             n_hair = np.random.randint(*self.n_hair_range)
             img_shape = img._size
-            print(n_hair)
+
             for _ in range(n_hair):
                 # Random rectangle
                 x_rectangle = np.random.randint(
@@ -133,48 +151,25 @@ class CVHairAugmentation:
                 model = make_pipeline(PolynomialFeatures(degree), Ridge())
                 model.fit(X, y)
                 hair = model.predict(X_plot)
+                angle = np.random.rand()*2*np.pi
+                x_, y_ = rotPt(X_plot.squeeze(), hair, angle)
                 draw_points = (np.asarray(
-                    [X_plot.squeeze(), hair]).T).astype(np.int32)
-                overlay = open_cv_image.copy()
-                cv2.polylines(overlay, [
-                              draw_points], False, (0, 0, 0), thickness=1)
-                angle = np.random.randint(0, 360)
-                overlay = imutils.rotate(overlay, angle=angle)
-                cv2.imshow('image', overlay)
-                cv2.waitKey(0)
-                cv2.destroyAllWindows()
-                alpha = 0.2  # Transparency factor.
+                    [x_, y_]).T).astype(np.int32)
+                b = background.copy()
+                cv2.polylines(b, [
+                              draw_points], False, (0, 0, 0, 0), thickness=1, lineType=cv2.LINE_AA)
 
-                # Following line overlays transparent rectangle over the image
-                open_cv_image = cv2.addWeighted(
-                    overlay, alpha, open_cv_image, 1 - alpha, 0)
+                alpha = np.random.rand()*.4
 
-                # # first of all, the base transformation of the data points is needed
-                # base = plt.gca().transData
-                # random_degree = np.random.randint(0, 360)
-                # rot = plt_transforms.Affine2D().rotate_deg_around(
-                #     img_shape[0]//2, img_shape[1]//2, random_degree)
-                # alpha = np.random.rand()*.4
-                # plt.plot(X_plot, hair, 'black',
-                #          alpha=alpha, transform=base+rot)
-            cv2.imshow('image', open_cv_image)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            return
+                background = cv2.addWeighted(
+                    b, alpha, background, 1 - alpha, 0)
+            return Image.fromarray(cv2.cvtColor(background, cv2.COLOR_BGR2RGB))
         else:
             return img
 
 
 if __name__ == '__main__':
-    # black blank image
-    blank_image = np.zeros(shape=[512, 512, 3], dtype=np.uint8)
-    # print(blank_image.shape)
-    cv2.imshow("Black Blank", blank_image)
-    # white blank image
-    blank_image2 = 255 * np.ones(shape=[512, 512, 3], dtype=np.uint8)
-    cv2.imshow("White Blank", blank_image2)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+
     IMAGE_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/data/train_260/ISIC_0015719.jpg'
     image = Image.open(IMAGE_PATH)
     transformer = transforms.Compose([
@@ -183,4 +178,4 @@ if __name__ == '__main__':
     ])
     aug_img = transformer(image)
     # print(aug_img._size)
-    # aug_img.show()
+    aug_img.show()

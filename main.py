@@ -16,11 +16,17 @@ import matplotlib.pyplot as plt
 from utils.target_encoder import KFoldTargetEncoder
 from utils.roc_star import epoch_update_gamma
 from utils.freeze import freeze, unfreeze_layer
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.impute import SimpleImputer
 
 
 def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
     set_seed(seed)
     df = pd.read_csv(TRAIN_DATA_PATH)
+    df = df[df['tfrecord'] != -1].reset_index(drop=True)  # drop duplicates
+
     df_test = pd.read_csv(TEST_DATA_PATH)
     # One-hot encoding of anatom_site_general_challenge feature
     concat = pd.concat([df['anatom_site_general_challenge'],
@@ -38,8 +44,9 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
     df_test['sex'] = df_test['sex'].fillna(-1)
 
     # Age features
-    df['age_approx'] /= df['age_approx'].max()
-    df_test['age_approx'] /= df_test['age_approx'].max()
+    age_max = max(df['age_approx'].max(), df_test['age_approx'].max())
+    df['age_approx'] /= age_max
+    df_test['age_approx'] /= age_max
     df['age_approx'] = df['age_approx'].fillna(0)
     df_test['age_approx'] = df_test['age_approx'].fillna(0)
 
@@ -49,7 +56,6 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
         [col for col in df.columns if 'site_' in col]
     metafeatures.remove('anatom_site_general_challenge')
 
-    folds = sorted(df.fold.unique())
     scores = []
 
     # Define device
@@ -74,21 +80,28 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
     #     params=model.parameters())
 
     # lrs, losses = find_optimal_lr(
-    #     model, df_lr, optimizer, scaler, device, init_value=1e-10, final_value=1e-2)
+    #     model, df_lr, optimizer, scaler, device, init_value=1e-9, final_value=10)
     # plt.plot(lrs, losses)
     # plt.show()
 
     # CV training
-    for fold in folds:
-        print(f'Fold {fold}')
-        # Train/valid split
-        df_train = df[df['fold'] != fold]
-        df_valid = df[df['fold'] == fold].reset_index(drop=True)
+    skf = KFold(n_splits=5, shuffle=True, random_state=42)
 
+    for fold, (idxT, idxV) in enumerate(skf.split(np.arange(15))):
+
+        # Train/valid split
+        df_train = df.loc[df.tfrecord.isin(idxT)]
+        df_valid = df.loc[df.tfrecord.isin(idxV)]
+        print(f'Fold {fold}')
         # Shuffle
         df_train = df_train.sample(frac=1).reset_index(drop=True)
         df_valid = df_valid.sample(frac=1).reset_index(drop=True)
-
+        # age_preprocessing = make_pipeline(
+        #     SimpleImputer(), StandardScaler())
+        # df_train['age_approx'] = age_preprocessing.fit_transform(
+        #     df_train[['age_approx']])
+        # df_valid['age_approx'] = age_preprocessing.transform(
+        #     df_valid[['age_approx']])
         # Dataloader
         df_train = MelanomaDataset(IMAGE_PATH.format(
             size=size), df_train, metafeatures=metafeatures)
@@ -115,10 +128,10 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
             mode='max',
             patience=1,
             verbose=False,
-            factor=.2
+            factor=.5
         )
 
-        # Train nd evaluation
+        # Train and evaluation
         early_stopping = EarlyStopping(patience=3, mode='max')
         model_path = f'saved_models/model_{fold}.bin'
         best_auc = 0
@@ -128,17 +141,18 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
         last_whole_y_pred = None
         epoch_gamma = .2
         for epoch in range(EPOCHS):
-            whole_y_t, whole_y_pred = train(epoch, epoch_gamma, last_whole_y_t, last_whole_y_pred,
-                                            df_train, model, optimizer, device, scaler)
-            last_whole_y_t = torch.tensor(whole_y_t).cuda()
-            last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
-            epoch_gamma = epoch_update_gamma(
-                last_whole_y_t, last_whole_y_pred, epoch)
+            train(epoch, epoch_gamma, last_whole_y_t, last_whole_y_pred,
+                  df_train, model, optimizer, device, scaler)
+            # last_whole_y_t = torch.tensor(whole_y_t).cuda()
+            # last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
+            # epoch_gamma = epoch_update_gamma(
+            #     last_whole_y_t, last_whole_y_pred, epoch)
             valid_roc_auc = evaluation(df_valid, model, optimizer, device)
             print(f'Epoch: {epoch}, validaion ROC AUC: {valid_roc_auc}')
             if valid_roc_auc > best_auc:
                 best_auc = valid_roc_auc
             scheduler.step(valid_roc_auc)
+            # if epoch > 0:
             early_stopping(valid_roc_auc, model, model_path)
             if early_stopping.early_stop:
                 print('Early stopping')
@@ -151,7 +165,7 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
 if __name__ == '__main__':
     batches = [64]
     sizes = [260]  # 224, 240, 260, 380, 380, 456, 528, 600
-    lrs = [5e-4]
+    lrs = [1e-3]
     # f = open('cv_results.txt', 'x')
     # f.write('B1-effnet\n')
     for bs in batches:

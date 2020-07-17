@@ -52,8 +52,8 @@ def find_optimal_lr(model, data_loader, optimizer, scaler, device, init_value=1e
         with amp.autocast():
             logits = model(images, metadata)
             loss = criterion_margin_focal_binary_cross_entropy(logits, targets)
-        if loss > 4 * best_loss:
-            return lrs[10:-5], losses[10:-5]
+        if loss > 5 * best_loss:
+            return lrs[5:-5], losses[5:-5]
         if loss < best_loss:
             best_loss = loss
 

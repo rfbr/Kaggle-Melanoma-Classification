@@ -36,8 +36,8 @@ def train(epoch, epoch_gamma, last_epoch_y_t, last_epoch_y_pred, data_loader, mo
     model.train()
     losses = AverageMeter()
     tqdm_data = tqdm(data_loader, total=len(data_loader))
-    whole_y_pred = np.array([])
-    whole_y_t = np.array([])
+    # whole_y_pred = np.array([])
+    # whole_y_t = np.array([])
     for data in tqdm_data:
         # Fetch data
         images = data['image']
@@ -53,25 +53,25 @@ def train(epoch, epoch_gamma, last_epoch_y_t, last_epoch_y_pred, data_loader, mo
             logits = model(images, metadata)
             y_pred = torch.sigmoid(logits).squeeze()
             # loss = nn.BCEWithLogitsLoss()(logits, targets)
-            if epoch == 0:
-                loss = criterion_margin_focal_binary_cross_entropy(
-                    logits, targets)
-            else:
-                loss = roc_star_loss(targets, y_pred, epoch_gamma,
-                                     last_epoch_y_t, last_epoch_y_pred)
+            # if epoch == 0:
+            loss = criterion_margin_focal_binary_cross_entropy(
+                logits, targets)
+            # else:
+            #     loss = roc_star_loss(targets, y_pred, epoch_gamma,
+            #                          last_epoch_y_t, last_epoch_y_pred)
         scaler.scale(loss).backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(optimizer)
         scaler.update()
         losses.update(loss.item(), images.size(0))
 
-        whole_y_pred = np.append(
-            whole_y_pred, y_pred.clone().detach().cpu().numpy())
-        whole_y_t = np.append(
-            whole_y_t, targets.clone().detach().cpu().numpy())
+        # whole_y_pred = np.append(
+        #     whole_y_pred, y_pred.clone().detach().cpu().numpy())
+        # whole_y_t = np.append(
+        #     whole_y_t, targets.clone().detach().cpu().numpy())
         tqdm_data.set_postfix(loss=losses.avg)
     torch.cuda.empty_cache()
-    return whole_y_t, whole_y_pred
+    # return whole_y_t, whole_y_pred
 
 
 def evaluation(data_loader, model, optimizer, device):
