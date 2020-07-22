@@ -13,6 +13,7 @@ import io
 import warnings
 from copy import deepcopy
 import imutils
+import os
 warnings.filterwarnings("ignore")
 
 
@@ -168,14 +169,51 @@ class CVHairAugmentation:
             return img
 
 
-if __name__ == '__main__':
+class CutOut(object):
+    def __init__(self, n_holes, length):
+        self.n_holes = n_holes
+        self.length = length
 
-    IMAGE_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/data/train_260/ISIC_0015719.jpg'
+    def __call__(self, img):
+        img = np.array(img)
+        h = img.shape[0]
+        w = img.shape[1]
+        mask = np.ones((h, w), np.uint8)
+        for n in range(self.n_holes):
+            y = np.random.randint(h)
+            x = np.random.randint(w)
+
+            y1 = np.clip(y - self.length//2, 0, h)
+            y2 = np.clip(y + self.length//2, 0, h)
+
+            x1 = np.clip(x - self.length//2, 0, w)
+            x2 = np.clip(x + self.length//2, 0, w)
+
+            mask[y1:y2, x1:x2] = 0.
+        img = img*np.expand_dims(mask, axis=2)
+        img = Image.fromarray(img)
+        return img
+
+
+if __name__ == '__main__':
+    im_path = '/home/romain/Projects/Kaggle/melanoma_classification/external_data_256/train'
+    images = os.listdir(im_path)
+
+    IMAGE_PATH = os.path.join(
+        im_path, images[np.random.randint(0, len(images))])
     image = Image.open(IMAGE_PATH)
     transformer = transforms.Compose([
+        transforms.RandomResizedCrop(
+            size=256, scale=(.5*(1+np.random.rand()), .5*(1+np.random.rand())), interpolation=Image.LANCZOS),
+        # transforms.transforms.RandomAffine(180, scale=(.8, 1.2), shear=10),
+        # CutOut(n_holes=1, length=24)
+        # transforms.ToTensor(),scal
+        # transforms.RandomErasing(scale=(0.1, 0.1))
         # MicroscopeAugmentation(),
-        CVHairAugmentation(p=1),
+        # CVHairAugmentation(p=1),
+
     ])
     aug_img = transformer(image)
     # print(aug_img._size)
+    image.show()
     aug_img.show()

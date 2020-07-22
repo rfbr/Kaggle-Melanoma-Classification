@@ -19,7 +19,7 @@ class EffNet(nn.Module):
         self.eff_model = EfficientNet.from_pretrained(
             'efficientnet-b1', advprop=False)
         self.eff_model._fc = nn.Linear(1280, 512)
-
+        self.dropout = nn.Dropout(.1)
         self.meta_model = nn.Sequential(nn.Linear(nb_metafeatures, 512),
                                         nn.LayerNorm(512),
                                         nn.ReLU(),
@@ -29,7 +29,7 @@ class EffNet(nn.Module):
                                         nn.LayerNorm(256),
                                         nn.ReLU(),
                                         nn.Dropout(p=0.1))
-        self.dropout = nn.Dropout(.1)
+
         self.cat_ouput = nn.Linear(512 + 256, 1)
 
     def forward(self, image, metadata):

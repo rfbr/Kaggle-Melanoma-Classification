@@ -1,5 +1,5 @@
 import pandas as pd
-from utils.constant import TRAIN_DATA_PATH, TEST_DATA_PATH, BATCH_SIZE, LEARNING_RATE, EPOCHS, IMAGE_PATH, SIZE
+from utils.constant import TRAIN_DATA_PATH, TEST_DATA_PATH, BATCH_SIZE, LEARNING_RATE, EPOCHS, TRAIN_IMAGE_PATH, SIZE
 from sklearn.model_selection import train_test_split
 from data.dataset import MelanomaDataset
 from torch.utils.data import DataLoader
@@ -20,13 +20,13 @@ from sklearn.model_selection import KFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.impute import SimpleImputer
+from sklearn.utils import class_weight
 
 
 def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
     set_seed(seed)
     df = pd.read_csv(TRAIN_DATA_PATH)
     df = df[df['tfrecord'] != -1].reset_index(drop=True)  # drop duplicates
-
     df_test = pd.read_csv(TEST_DATA_PATH)
     # One-hot encoding of anatom_site_general_challenge feature
     concat = pd.concat([df['anatom_site_general_challenge'],
@@ -68,7 +68,7 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
     # model.to(device)
 
     # # Data loader
-    # df_lr = MelanomaDataset(IMAGE_PATH.format(
+    # df_lr = MelanomaDataset(TRAIN_IMAGE_PATH.format(
     #     size=size), df, metafeatures=metafeatures)
     # df_lr = DataLoader(df_lr, batch_size=bs, num_workers=6)
 
@@ -86,16 +86,14 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
 
     # CV training
     skf = KFold(n_splits=5, shuffle=True, random_state=42)
-
     for fold, (idxT, idxV) in enumerate(skf.split(np.arange(15))):
-
         # Train/valid split
         df_train = df.loc[df.tfrecord.isin(idxT)]
         df_valid = df.loc[df.tfrecord.isin(idxV)]
+        df_train = df_train.reset_index(drop=True)
+        df_valid = df_valid.reset_index(drop=True)
         print(f'Fold {fold}')
-        # Shuffle
-        df_train = df_train.sample(frac=1).reset_index(drop=True)
-        df_valid = df_valid.sample(frac=1).reset_index(drop=True)
+
         # age_preprocessing = make_pipeline(
         #     SimpleImputer(), StandardScaler())
         # df_train['age_approx'] = age_preprocessing.fit_transform(
@@ -103,16 +101,16 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
         # df_valid['age_approx'] = age_preprocessing.transform(
         #     df_valid[['age_approx']])
         # Dataloader
-        df_train = MelanomaDataset(IMAGE_PATH.format(
-            size=size), df_train, metafeatures=metafeatures)
-        df_train = DataLoader(df_train, batch_size=bs, num_workers=6)
+        df_train = MelanomaDataset(
+            TRAIN_IMAGE_PATH, df_train, metafeatures=metafeatures)
+        df_train = DataLoader(df_train, batch_size=bs,
+                              num_workers=6, shuffle=True)
 
         # valid_images_path = [os.path.join(
-        #     IMAGE_PATH.format(size=size), f'{image}.jpg') for image in df_valid['image_name']]
+        #     TRAIN_IMAGE_PATH.format(size=size), f'{image}.jpg') for image in df_valid['image_name']]
         df_valid = MelanomaDataset(
-            IMAGE_PATH.format(size=size), df_valid, metafeatures=metafeatures, test=True)
+            TRAIN_IMAGE_PATH, df_valid, metafeatures=metafeatures, test=True)
         df_valid = DataLoader(df_valid, batch_size=bs, num_workers=6)
-
         # Define model
         model = EffNet(nb_metafeatures=len(metafeatures))
         model.to(device)
@@ -128,12 +126,12 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
             mode='max',
             patience=1,
             verbose=False,
-            factor=.5
+            factor=.25
         )
 
         # Train and evaluation
-        early_stopping = EarlyStopping(patience=3, mode='max')
-        model_path = f'saved_models/model_{fold}.bin'
+        early_stopping = EarlyStopping(patience=4, mode='max')
+        model_path = f'saved_models/b1_model_{fold}.bin'
         best_auc = 0
 
         # initialize last epoch with random values
@@ -147,7 +145,7 @@ def main(bs=BATCH_SIZE, size=SIZE, lr=LEARNING_RATE, seed=42):
             # last_whole_y_pred = torch.tensor(whole_y_pred).cuda()
             # epoch_gamma = epoch_update_gamma(
             #     last_whole_y_t, last_whole_y_pred, epoch)
-            valid_roc_auc = evaluation(df_valid, model, optimizer, device)
+            valid_roc_auc = evaluation(df_valid, model, device)
             print(f'Epoch: {epoch}, validaion ROC AUC: {valid_roc_auc}')
             if valid_roc_auc > best_auc:
                 best_auc = valid_roc_auc

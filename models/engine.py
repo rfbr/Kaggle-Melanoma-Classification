@@ -9,11 +9,11 @@ from torch.cuda import amp
 from utils.roc_star import roc_star_loss, epoch_update_gamma
 
 
-def criterion_margin_focal_binary_cross_entropy(logit, truth):
-    weight_pos = 2
-    weight_neg = 1
+def criterion_margin_focal_binary_cross_entropy(logit, truth, weight_pos=2, weight_neg=1):
+    weight_pos = weight_pos
+    weight_neg = weight_neg
     gamma = 2
-    margin = 0.2
+    margin = 0.4
     em = np.exp(margin)
 
     logit = logit.view(-1)
@@ -51,14 +51,15 @@ def train(epoch, epoch_gamma, last_epoch_y_t, last_epoch_y_pred, data_loader, mo
         optimizer.zero_grad()
         with amp.autocast():
             logits = model(images, metadata)
-            y_pred = torch.sigmoid(logits).squeeze()
-            # loss = nn.BCEWithLogitsLoss()(logits, targets)
-            # if epoch == 0:
+        # y_pred = torch.sigmoid(logits).squeeze()
+        # loss = nn.BCEWithLogitsLoss()(logits, targets)
+        # if epoch == 0:
             loss = criterion_margin_focal_binary_cross_entropy(
                 logits, targets)
-            # else:
-            #     loss = roc_star_loss(targets, y_pred, epoch_gamma,
-            #                          last_epoch_y_t, last_epoch_y_pred)
+        # else:
+        #     loss = roc_star_loss(targets, y_pred, epoch_gamma,
+        #                          last_epoch_y_t, last_epoch_y_pred)
+
         scaler.scale(loss).backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         scaler.step(optimizer)
@@ -74,9 +75,8 @@ def train(epoch, epoch_gamma, last_epoch_y_t, last_epoch_y_pred, data_loader, mo
     # return whole_y_t, whole_y_pred
 
 
-def evaluation(data_loader, model, optimizer, device):
+def evaluation(data_loader, model, device):
     model.eval()
-
     prediction_list = []
     target_list = []
     with torch.no_grad():
@@ -85,16 +85,48 @@ def evaluation(data_loader, model, optimizer, device):
             images = data['image']
             metadata = data['metadata']
             targets = data['target']
-            images = images.to(device, dtype=torch.float32)
+            for i in range(len(images)):
+                images[i] = images[i].to(device, dtype=torch.float32)
             metadata = metadata.to(device, dtype=torch.float32)
 
             # Compute model output
-            logits = model(images, metadata)
-            preds = torch.sigmoid(logits).cpu().detach().numpy().reshape(-1, 1)
-            prediction_list.append(preds)
+            tta_preds = []
+            for image in images:
+                logits = model(image, metadata)
+                preds = torch.sigmoid(logits).cpu(
+                ).detach().numpy().reshape(-1, 1)
+                tta_preds.append(preds)
+            prediction_list.append(
+                np.median(np.concatenate(tta_preds, -1), -1))
             target_list.append(targets.cpu().detach().numpy())
     torch.cuda.empty_cache()
 
     roc_auc = roc_auc_score(np.concatenate(target_list),
                             np.concatenate(prediction_list))
     return roc_auc
+
+
+def predict(data_loader, model, device):
+    model.eval()
+
+    prediction_list = []
+    tqdm_data = tqdm(data_loader, total=len(data_loader))
+    with torch.no_grad():
+        for data in tqdm_data:
+            # Fetch data
+            images = data['image']
+            metadata = data['metadata']
+            for i in range(len(images)):
+                images[i] = images[i].to(device, dtype=torch.float32)
+            metadata = metadata.to(device, dtype=torch.float32)
+
+            # Compute model output
+            tta_preds = []
+            for image in images:
+                logits = model(image, metadata)
+                preds = torch.sigmoid(logits).cpu(
+                ).detach().numpy().reshape(-1, 1)
+                tta_preds.append(preds)
+            prediction_list.append(np.concatenate(tta_preds, -1).mean(-1))
+    torch.cuda.empty_cache()
+    return np.concatenate(prediction_list)

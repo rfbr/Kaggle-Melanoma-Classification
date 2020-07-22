@@ -45,5 +45,5 @@ class EarlyStopping:
                     self.val_score, epoch_score
                 )
             )
-            # torch.save(model.state_dict(), model_path)
+            torch.save(model.state_dict(), model_path)
         self.val_score = epoch_score
