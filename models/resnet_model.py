@@ -1,28 +1,19 @@
+import pretrainedmodels
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from efficientnet_pytorch import EfficientNet
-
-# efficientnet-b0-224 - 1280
-# efficientnet-b1-240 - 1280
-# efficientnet-b2-260 - 1408
-# efficientnet-b3-300 - 1536
-# efficientnet-b4-380 - 1792
-# efficientnet-b5-456 - 2048
-# efficientnet-b6-528 - 2304
-# efficientnet-b7-600 - 2560
 
 
-class EffNet(nn.Module):
+class ResNet(nn.Module):
     """
-    Model using EfficientNet for the classification.
+    Model using ResNet for the classification.
     """
 
-    def __init__(self, nb_metafeatures, model_nb=5):
-        super(EffNet, self).__init__()
-        self.eff_model = EfficientNet.from_pretrained(
-            f'efficientnet-b{model_nb}', advprop=False)
-        self.eff_model._fc = nn.Linear(1280, 512)
+    def __init__(self, nb_metafeatures, pretrained='imagenet'):
+        super(ResNet, self).__init__()
+        self.res_model = pretrainedmodels.__dict__[
+            'resnet50'](pretrained=pretrained)
+        self.res_fc = nn.Linear(2048, 512)
         self.dropout = nn.Dropout(.1)
         self.meta_model = nn.Sequential(nn.Linear(nb_metafeatures, 512),
                                         nn.LayerNorm(512),
@@ -37,8 +28,10 @@ class EffNet(nn.Module):
         self.cat_ouput = nn.Linear(512 + 256, 1)
 
     def forward(self, image, metadata):
-
-        image_embeddings = self.dropout(self.eff_model(image))
+        x = self.res_model.features(image)
+        x = F.adaptive_avg_pool2d(x, 1)
+        x = x.reshape(image.shape[0], -1)
+        image_embeddings = self.dropout(self.res_fc(x))
 
         metafeatures_embeddings = self.meta_model(metadata)
 

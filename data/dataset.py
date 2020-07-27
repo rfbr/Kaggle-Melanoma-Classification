@@ -1,21 +1,20 @@
-from PIL import Image, ImageFile
+import os
+
 import numpy as np
 import torch
+from PIL import Image, ImageFile
 from torchvision import transforms
-import os
-from data.augmentations import MicroscopeAugmentation, CVHairAugmentation, CutOut
+
+from data.augmentations import CutOut
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 class MelanomaDataset:
-
-    def __init__(self, image_paths, df, metafeatures, resize=None, resize_alg=Image.LANCZOS, augmentation=False, test=False):
+    def __init__(self, image_paths, df, metafeatures, test=False):
         self.image_paths = image_paths
         self.df = df
         self.metafeatures = metafeatures
-        self.resize = resize
-        self.resize_alg = resize_alg
-        self.augmentation = augmentation
         self.test = test
 
     def __len__(self):
@@ -27,43 +26,28 @@ class MelanomaDataset:
         metadata = np.array(
             self.df.iloc[index][self.metafeatures].values, dtype=np.float32)
         target = self.df.iloc[index]['target']
-        if self.resize:
-            image = image.resize(self.resize, resample=self.resize_alg)
+
         if self.test:
+            # Performing TTA
             h_transformer = transforms.Compose([
                 transforms.RandomHorizontalFlip(p=1),
                 transforms.ToTensor(),
-                # transforms.Lambda(lambda img: img * 2.0 - 1.0)
-                transforms.Normalize([0.485, 0.456, 0.406], [
-                                     0.229, 0.224, 0.225]),
+                transforms.Lambda(lambda img: img * 2.0 - 1.0)
             ])
             v_transformer = transforms.Compose([
                 transforms.RandomVerticalFlip(p=1),
                 transforms.ToTensor(),
-                # transforms.Lambda(lambda img: img * 2.0 - 1.0)
-                transforms.Normalize([0.485, 0.456, 0.406], [
-                                     0.229, 0.224, 0.225]),
+                transforms.Lambda(lambda img: img * 2.0 - 1.0)
             ])
-            # rc_transformer = transforms.Compose([
-            #     transforms.RandomResizedCrop(size=256, scale=(
-            #         0.5*(1 + np.random.rand()), 0.5*(1 + np.random.rand())), interpolation=Image.LANCZOS),
-            #     transforms.ToTensor(),
-            #     # transforms.Lambda(lambda img: img * 2.0 - 1.0)
-            #     transforms.Normalize([0.485, 0.456, 0.406], [
-            #                          0.229, 0.224, 0.225]),
-            # ])
+
             n_transformer = transforms.Compose([
                 transforms.ToTensor(),
-                # transforms.Lambda(lambda img: img * 2.0 - 1.0)
-                transforms.Normalize([0.485, 0.456, 0.406], [
-                                     0.229, 0.224, 0.225]),
+                transforms.Lambda(lambda img: img * 2.0 - 1.0)
             ])
             cj_transformer = transforms.Compose([
                 transforms.ColorJitter(brightness=32. / 255., saturation=0.5),
                 transforms.ToTensor(),
-                # transforms.Lambda(lambda img: img * 2.0 - 1.0)
-                transforms.Normalize([0.485, 0.456, 0.406], [
-                                     0.229, 0.224, 0.225]),
+                transforms.Lambda(lambda img: img * 2.0 - 1.0)
             ])
             # rot_transformer = transforms.Compose([
             #     transforms.RandomChoice([
@@ -122,9 +106,9 @@ class MelanomaDataset:
                 transforms.ColorJitter(brightness=32. / 255., saturation=0.5),
                 CutOut(n_holes=1, length=16),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
-                    0.229, 0.224, 0.225]),
-                # transforms.Lambda(lambda img: img * 2.0 - 1.0),
+                # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[
+                #     0.229, 0.224, 0.225]),
+                transforms.Lambda(lambda img: img * 2.0 - 1.0),
             ])
             return {
                 "image": transformer(image),

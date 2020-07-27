@@ -1,8 +1,10 @@
-TRAIN_DATA_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/external_data_256/train.csv'
-TEST_DATA_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/data/test.csv'
-SUB_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/external_data/sample_submission.csv'
-TRAIN_IMAGE_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/external_data_256/train'
-TEST_IMAGE_PATH = '/home/romain/Projects/Kaggle/melanoma_classification/external_data_256/test'
+import os
+
+TRAIN_DATA_PATH = os.path.abspath('../data/train.csv')
+TEST_DATA_PATH = os.path.abspath('../data/test.csv')
+SUB_PATH = os.path.abspath('../data/sample_submission.csv')
+TRAIN_IMAGE_PATH = os.path.abspath('../data/jpeg/train')
+TEST_IMAGE_PATH = os.path.abspath('../data/jpeg/test')
 SIZE = 256
 BATCH_SIZE = 64
 EPOCHS = 100

@@ -6,6 +6,7 @@ from data.dataset import MelanomaDataset
 from torch.utils.data import DataLoader
 import os
 from models.effnet_model import EffNet
+from models.resnet_model import ResNet
 from models import engine
 from scipy.stats import rankdata
 
@@ -54,22 +55,37 @@ def create_submission():
     print(f'Working on {device}')
 
     models = os.listdir('saved_models')
-    results = np.zeros((df_test.shape[0], len(models)))
-    for idx, model_name in enumerate(models):
-        model = EffNet(nb_metafeatures=len(metafeatures))
-        model.to(device)
-        model.load_state_dict(torch.load(
-            os.path.join('saved_models', model_name)))
-        result = engine.predict(test_df, model, device)
-        results[:, idx] = result
+    results = []
+    for model_name in models:
+        print("Model name:", model_name[-1])
+        files = os.listdir(os.path.join('saved_models', model_name))
+        res = np.zeros((df_test.shape[0], len(files)))
+        for i, f in enumerate(files):
+            model = EffNet(nb_metafeatures=len(
+                metafeatures), model_nb=model_name[-1])
+            model.to(device)
+            model.load_state_dict(torch.load(
+                os.path.join('saved_models', model_name, f)))
+            result = engine.predict(test_df, model, device)
+            res[:, i] = result
+        results.append(res)
+    results = pd.DataFrame(np.concatenate(results, axis=1))
     # Ensemble
     submission = pd.read_csv(SUB_PATH)
+    submission = pd.concat([submission, results], axis=1)
     for j in range(len(models)):
         results[:, j] = rankdata(
             results[:, j], method='min')
     submission['target'] = results.mean(-1)
-    submission.to_csv('submission.csv', index=False, float_format='%.8f')
+    submission.to_csv('submission.csv', index=False, float_format='%.12f')
 
 
 if __name__ == '__main__':
-    create_submission()
+    # create_submission()
+    submission = pd.read_csv('submission.csv')
+    predictions = submission.iloc[:, 2:]
+    sub = submission[['image_name', 'target']]
+    sub['target'] = predictions.values.mean(-1)
+    sub.to_csv('sub_mean.csv', index=False, float_format='%.12f')
+    sub['target'] = np.median(predictions.values, axis=-1)
+    sub.to_csv('sub_median.csv', index=False, float_format='%.12f')

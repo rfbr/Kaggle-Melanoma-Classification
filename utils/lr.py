@@ -1,36 +1,15 @@
-import math
+import numpy as np
 import torch
 from torch.cuda import amp
-import numpy as np
-import torch.nn as nn
-import torch.nn.functional as F
 from tqdm import tqdm
 
 
-def criterion_margin_focal_binary_cross_entropy(logit, truth):
-    weight_pos = 2
-    weight_neg = 1
-    gamma = 2
-    margin = 0.2
-    em = np.exp(margin)
-
-    logit = logit.view(-1)
-    truth = truth.view(-1)
-    log_pos = -F.logsigmoid(logit)
-    log_neg = -F.logsigmoid(-logit)
-
-    log_prob = truth*log_pos + (1-truth)*log_neg
-    prob = torch.exp(-log_prob)
-    margin = torch.log(em + (1-em)*prob)
-
-    weight = truth*weight_pos + (1-truth)*weight_neg
-    loss = margin + weight*(1 - prob) ** gamma * log_prob
-
-    loss = loss.mean()
-    return loss
-
-
 def find_optimal_lr(model, data_loader, optimizer, scaler, device, init_value=1e-8, final_value=10):
+    """
+    Estimate an optimal learning rate.
+    For one epoch, try different LR for each batch size from init value to final value,
+    thus we can choose the LR corresponding to the steepest point in the curve.
+    """
     nb_in_epoch = len(data_loader)-1
     update_step = (final_value/init_value)**(1/nb_in_epoch)
     lr = init_value

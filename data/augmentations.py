@@ -1,25 +1,30 @@
-import time
-from tqdm import tqdm
-from torchvision import transforms
-import cv2
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import Ridge
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import transforms as plt_transforms
-from PIL import Image
 import io
+import os
+import time
 import warnings
 from copy import deepcopy
+
+import cv2
 import imutils
-import os
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import transforms as plt_transforms
+from PIL import Image
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import PolynomialFeatures
+from torchvision import transforms
+from tqdm import tqdm
+
 warnings.filterwarnings("ignore")
 
 
-def rotPt(x, y, angle):
-    cx = 260//2
-    cy = 260//2
+def rotPt(x, y, angle, img_size=(224, 224)):
+    """
+    Rotate the point (x,y) to a given angle.
+    """
+    cx = img_size[0]//2
+    cy = img_size[1]//2
 
     x -= cx
     y -= cy
@@ -35,6 +40,15 @@ def rotPt(x, y, angle):
 
 
 class MicroscopeAugmentation:
+    """
+    Add a black circle around the image and zoom in to reproduce microscope photos
+    that we can found in the dataset.
+
+    Parameters:
+        p {float}: probability (default: {.5}).
+        size {int tuple}: size of the image (default: {(224,224)}).
+    """
+
     def __init__(self, p=.5, size=(224, 224)):
         self.p = p
         self.size = size
@@ -63,58 +77,15 @@ class MicroscopeAugmentation:
 
 
 class HairAugmentation:
-    def __init__(self, p=.5, n_hair_range=(20, 60), degrees=[2, 3, 4, 5, 6]):
-        self.p = p
-        self.degrees = degrees
-        self.n_hair_range = n_hair_range
+    """
+    Draw random hair by creating random curves via a Ridge regression.
 
-    def __call__(self, img):
-        if np.random.rand() < self.p:
-            n_hair = np.random.randint(*self.n_hair_range)
-            img_shape = img._size
-            plt.imshow(img)
-            for _ in range(n_hair):
+    Parameters:
+        p {float}: probability (default: {.5}).
+        n_hair_range {int tuple}: number of hair will be randomly drawn in this range (default: {(20,70)})).
+        degrees {int list}: degree for the Rigde regression will be randomly drawn in this list (default: {[2, 3, 4, 5, 6]})).
+    """
 
-                # Random rectangle
-                x_rectangle = np.random.randint(
-                    low=0, high=img_shape[0]-1, size=2)
-                y_rectangle = np.random.randint(
-                    low=0, high=img_shape[1]-1, size=2)
-
-                x_min = min(x_rectangle[0], x_rectangle[1])
-                x_max = max(x_min+1, max(x_rectangle[0], x_rectangle[1]))
-                y_min = min(y_rectangle[0], y_rectangle[1])
-                y_max = max(y_min+1, max(y_rectangle[0], y_rectangle[1]))
-
-                X = np.random.randint(low=x_min, high=x_max,
-                                      size=50).reshape((-1, 1))
-                y = np.random.randint(low=y_min, high=y_max, size=50)
-
-                X_plot = np.linspace(x_min, x_max, 100).reshape((-1, 1))
-                degree = np.random.choice(self.degrees)
-                model = make_pipeline(PolynomialFeatures(degree), Ridge())
-                model.fit(X, y)
-                hair = model.predict(X_plot)
-                # first of all, the base transformation of the data points is needed
-                base = plt.gca().transData
-                random_degree = np.random.randint(0, 360)
-                rot = plt_transforms.Affine2D().rotate_deg_around(
-                    img_shape[0]//2, img_shape[1]//2, random_degree)
-                alpha = np.random.rand()*.4
-                plt.plot(X_plot, hair, 'black',
-                         alpha=alpha, transform=base+rot)
-
-            buf = io.BytesIO()
-            plt.savefig(buf, format='jpg')
-            aug_image = Image.open(buf).copy()
-            buf.close()
-            aug_image = aug_image.resize((260, 260))
-            return aug_image
-        else:
-            return img
-
-
-class CVHairAugmentation:
     def __init__(self, p=.5, n_hair_range=(20, 70), degrees=[2, 3, 4, 5, 6]):
         self.p = p
         self.degrees = degrees
@@ -170,6 +141,14 @@ class CVHairAugmentation:
 
 
 class CutOut(object):
+    """
+    Cut out augmentation (https://arxiv.org/pdf/1708.04552.pdf)
+
+    Parameters:
+        n_holes {int}: number of cutout.
+        length {int}: length of the square.
+    """
+
     def __init__(self, n_holes, length):
         self.n_holes = n_holes
         self.length = length
@@ -193,27 +172,3 @@ class CutOut(object):
         img = img*np.expand_dims(mask, axis=2)
         img = Image.fromarray(img)
         return img
-
-
-if __name__ == '__main__':
-    im_path = '/home/romain/Projects/Kaggle/melanoma_classification/external_data_256/train'
-    images = os.listdir(im_path)
-
-    IMAGE_PATH = os.path.join(
-        im_path, images[np.random.randint(0, len(images))])
-    image = Image.open(IMAGE_PATH)
-    transformer = transforms.Compose([
-        transforms.RandomResizedCrop(
-            size=256, scale=(.5*(1+np.random.rand()), .5*(1+np.random.rand())), interpolation=Image.LANCZOS),
-        # transforms.transforms.RandomAffine(180, scale=(.8, 1.2), shear=10),
-        # CutOut(n_holes=1, length=24)
-        # transforms.ToTensor(),scal
-        # transforms.RandomErasing(scale=(0.1, 0.1))
-        # MicroscopeAugmentation(),
-        # CVHairAugmentation(p=1),
-
-    ])
-    aug_img = transformer(image)
-    # print(aug_img._size)
-    image.show()
-    aug_img.show()

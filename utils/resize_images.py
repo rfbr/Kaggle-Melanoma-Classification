@@ -1,9 +1,10 @@
-import os
 import glob
-from tqdm import tqdm
-from PIL import Image, ImageFile
+import os
+
 from joblib import Parallel, delayed
-import sys
+from PIL import Image, ImageFile
+from tqdm import tqdm
+
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 

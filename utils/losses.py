@@ -1,4 +1,32 @@
+import numpy as np
 import torch
+
+
+def margin_focal_binary_cross_entropy(logit, truth, weight_pos=2, weight_neg=1):
+    """
+    Implementation of the margin focal binary cross entropy presented in this paper:
+    https://arxiv.org/pdf/1811.04237.pdf
+    """
+    weight_pos = weight_pos
+    weight_neg = weight_neg
+    gamma = 2
+    margin = 0.4
+    em = np.exp(margin)
+
+    logit = logit.view(-1)
+    truth = truth.view(-1)
+    log_pos = -F.logsigmoid(logit)
+    log_neg = -F.logsigmoid(-logit)
+
+    log_prob = truth*log_pos + (1-truth)*log_neg
+    prob = torch.exp(-log_prob)
+    margin = torch.log(em + (1-em)*prob)
+
+    weight = truth*weight_pos + (1-truth)*weight_neg
+    loss = margin + weight*(1 - prob) ** gamma * log_prob
+
+    loss = loss.mean()
+    return loss
 
 
 def roc_star_loss(_y_true, y_pred, gamma, _epoch_true, epoch_pred):
