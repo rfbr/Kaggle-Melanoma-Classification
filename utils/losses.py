@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 
 def margin_focal_binary_cross_entropy(logit, truth, weight_pos=2, weight_neg=1):
